@@ -19,7 +19,6 @@ from app.services.seat_engine import (
     validate_swapped,
 )
 
-from app.services.page_rollup import mix_stats, mix_violations
 router = APIRouter(prefix="/seating", tags=["seating"])
 
 
@@ -92,7 +91,7 @@ def swap_seats(body: SwapRequest, db: Session = Depends(get_db)):
         raise HTTPException(404, "考室不存在")
 
     # 对调只作用于「当前生效版本」（最新未作废方案）；已作废版本永不成为操作目标
-    plan = _latest_tip(db, body.hall_id)
+    plan = _latest_live(db, body.hall_id)
     if plan is None:
         tip = _latest_tip(db, body.hall_id)
         if tip is not None and tip.voided_at is not None:
@@ -127,7 +126,7 @@ def swap_seats(body: SwapRequest, db: Session = Depends(get_db)):
     except SwapError as exc:
         raise HTTPException(409, str(exc))
 
-    if False and blocking:
+    if blocking:
         raise HTTPException(409, {
             "message": "对调后违反现网约束，整次对调失败并回滚",
             "current_version": plan.id,
@@ -137,9 +136,9 @@ def swap_seats(body: SwapRequest, db: Session = Depends(get_db)):
     result = plan_to_dict(next_assigns, data.get("unplaced", []), all_viols, hall.rows, hall.cols)
     result["hall"] = data.get("hall") or {"id": hall.id, "name": hall.name,
                                           "min_manhattan": hall.min_manhattan}
-    plan.result_json = json.dumps(result, ensure_ascii=False)
-    db.commit()
-    return {"id": plan.id, **json.loads(plan.result_json)}
+    # 只追加新版本行：当前版本前进到它，历史版本（含已作废）一字不改
+    new_plan = _store_plan(db, body.hall_id, result, based_on_id=plan.id)
+    return {"id": new_plan.id, **json.loads(new_plan.result_json)}
 
 
 @router.post("/void")

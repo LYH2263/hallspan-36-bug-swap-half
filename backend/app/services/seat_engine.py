@@ -99,7 +99,7 @@ def swap_candidates(assigns: list[SeatAssign], id_a: int, id_b: int) -> list[Sea
     next_by_id = {a.candidate_id: a for a in next_assigns}
     a, b = next_by_id[id_a], next_by_id[id_b]
     # 行、列一起互换（对调两人格子，第三人座位不变）
-    a.row, a.col = b.row, b.col
+    a.row, a.col, b.row, b.col = b.row, b.col, a.row, a.col
     return next_assigns
 
 
